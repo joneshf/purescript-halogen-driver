@@ -1,5 +1,10 @@
 {
   "name": "purescript-halogen-driver",
+  "description": "Collection of drivers and utilities for purescript-halogen",
+  "authors": [
+    "Hardy Jones <jones3.hardy@gmail.com>"
+  ],
+  "license": "MIT",
   "ignore": [
     "**/.*",
     "node_modules",
