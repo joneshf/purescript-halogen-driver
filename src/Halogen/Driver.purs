@@ -7,7 +7,6 @@ import Control.Coroutine as Control.Coroutine
 import Control.Monad.Free as Control.Monad.Free
 import Control.Monad.State as Control.Monad.State
 import Control.Plus as Control.Plus
-import Data.Coyoneda as Data.Coyoneda
 import Data.Foldable as Data.Foldable
 import Data.Maybe as Data.Maybe
 import Data.Set as Data.Set
@@ -35,7 +34,7 @@ aff ::
   Effect.Aff.Aff Unit
 aff parent child input component =
   Data.Foldable.for_ (spec.receiver input) \x ->
-    evalAff parent child spec.eval initialState (spec.eval x)
+    evalAff parent spec.eval initialState (spec.eval x)
   where
   initialState :: forall s. s
   initialState = spec.initialState input
@@ -48,49 +47,37 @@ evalAff ::
   forall s f g p o.
   Ord p =>
   (o -> Effect.Aff.Aff Unit) ->
-  (g ~> f) ->
   (f ~> Halogen.HalogenM s f g p o Effect.Aff.Aff) ->
   s ->
   Halogen.HalogenM s f g p o Effect.Aff.Aff ~> Effect.Aff.Aff
-evalAff parent child' eval initialState (Halogen.HalogenM x'') =
-  Control.Monad.State.evalStateT (Control.Monad.Free.foldFree go x'') affState
+evalAff parent eval initialState (Halogen.HalogenM x'') =
+  Control.Monad.State.evalStateT (Control.Monad.Free.foldFree go x'') initialState
   where
   go ::
     Halogen.HalogenF s f g p o Effect.Aff.Aff ~>
-    Control.Monad.State.StateT (AffState s p) Effect.Aff.Aff
+    Control.Monad.State.StateT s Effect.Aff.Aff
   go = case _ of
-    Halogen.ChildQuery slot x' -> do
-      { children } <- Control.Monad.State.get
-      if Data.Set.member slot children
-        then do
-          let hoisted = Data.Coyoneda.hoistCoyoneda (eval <<< child') x'
-              Halogen.HalogenM x = Data.Coyoneda.lowerCoyoneda hoisted
-          Control.Monad.Free.foldFree go x
-        else Control.Plus.empty
-    Halogen.CheckSlot slot f -> do
-      { children } <- Control.Monad.State.get
-      pure (f $ Data.Set.member slot children)
+    Halogen.ChildQuery _ _ -> Control.Plus.empty
+    Halogen.CheckSlot _ f -> pure (f false)
     Halogen.Fork x' -> Halogen.liftAff do
       flap Halogen.Query.ForkF.unFork x' \(Halogen.Query.ForkF.ForkF x f) -> do
-        let unforked = evalAff parent child' eval initialState x
+        let unforked = evalAff parent eval initialState x
         fiber <- Effect.Aff.forkAff unforked
         pure (f $ flip Effect.Aff.killFiber fiber)
     Halogen.GetRef _ f -> pure (f Data.Maybe.Nothing)
-    Halogen.GetSlots f -> do
-      { children } <- Control.Monad.State.get
-      pure (f $ Data.Set.toUnfoldable children)
+    Halogen.GetSlots f -> pure (f mempty)
     Halogen.Halt error -> Effect.Aff.throwError (Effect.Exception.error error)
     Halogen.Lift x -> Halogen.liftAff x
     Halogen.Par (Halogen.Query.HalogenM.HalogenAp x) -> do
-      let loop = evalAff parent child' eval initialState
+      let loop = evalAff parent eval initialState
       Halogen.liftAff (Control.Applicative.Free.foldFreeAp loop x)
     Halogen.Raise message y -> do
       Halogen.liftAff (parent message)
       pure y
     Halogen.State f -> do
-      { state } <- Control.Monad.State.get
+      state <- Control.Monad.State.get
       let Data.Tuple.Tuple x s = f state
-      Control.Monad.State.modify_ (_ { state = s })
+      Control.Monad.State.put s
       pure x
     Halogen.Subscribe eventSource x' -> Halogen.liftAff do
       let consumer ::
@@ -101,7 +88,7 @@ evalAff parent child' eval initialState (Halogen.HalogenM x'') =
             x <- Control.Coroutine.await
             status <-
               Control.Monad.State.lift
-                (evalAff parent child' eval initialState $ eval x)
+                (evalAff parent eval initialState $ eval x)
             case status of
               Halogen.Query.EventSource.Done -> mempty
               Halogen.Query.EventSource.Listening -> consumer
@@ -109,9 +96,3 @@ evalAff parent child' eval initialState (Halogen.HalogenM x'') =
       Control.Coroutine.runProcess (Control.Coroutine.connect producer consumer)
       done
       pure x'
-
-  affState :: AffState s p
-  affState =
-    { children: mempty
-    , state: initialState
-    }

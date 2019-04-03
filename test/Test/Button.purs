@@ -3,7 +3,6 @@ module Test.Button (suite) where
 import Prelude
 
 import Data.Const as Data.Const
-import Data.Newtype as Data.Newtype
 import Effect.Aff as Effect.Aff
 import Halogen as Halogen
 import Halogen.Driver as Halogen.Driver
@@ -41,7 +40,7 @@ toggle = Test.Unit.suite "Toggle" do
     Halogen.liftAff (Test.Unit.Assert.assertFalse "state should be `false`" state)
 
 run :: Halogen.HalogenM Boolean Query (Data.Const.Const Void) Void Message Effect.Aff.Aff ~> Effect.Aff.Aff
-run = Halogen.Driver.evalAff parent child eval false
+run = Halogen.Driver.evalAff parent eval false
 
 newtype Message = Toggled Boolean
 
@@ -50,9 +49,6 @@ data Query a
   | IsOn (Boolean -> a)
 
 type State = Boolean
-
-child :: Data.Const.Const Void ~> Query
-child = absurd <<< Data.Newtype.un Data.Const.Const
 
 eval ::
   forall m.
