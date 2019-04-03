@@ -1,4 +1,8 @@
-module Test.Button (suite) where
+module Test.Button
+  ( Message(..)
+  , Query(..)
+  , suite
+  ) where
 
 import Prelude
 
@@ -10,7 +14,7 @@ import Test.Unit as Test.Unit
 import Test.Unit.Assert as Test.Unit.Assert
 
 suite :: Test.Unit.TestSuite
-suite = Test.Unit.suite "button" do
+suite = Test.Unit.suite "Test.Button" do
   Test.Unit.suite "eval" do
     isOn
     toggle
